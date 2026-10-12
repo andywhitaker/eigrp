@@ -239,17 +239,20 @@ void eigrp_fsm_query_sent(eigrp_instance_t *eigrp,
 	 * no eligible peers after QUERY target selection.  That is already the
 	 * last-reply condition; do not strand the destination ACTIVE. */
 	route = eigrp_topology_route_read(prefix);
-	if (!route)
-		return;
 	msg.packet_type = EIGRP_OPC_REPLY;
 	msg.eigrp = eigrp;
-	msg.adv_router = route->adv_router;
+	msg.adv_router = route ? route->adv_router : eigrp->neighbor_self;
 	msg.route = route;
 	msg.prefix = prefix;
-	msg.data_type = (route->type == EIGRP_TLV_IPv4_EXT
+	msg.data_type = (route && (route->type == EIGRP_TLV_IPv4_EXT
 			 || route->type == EIGRP_TLV_IPv6_EXT
-			 || route->type == EIGRP_TLV_MP_EXT) ? EIGRP_EXT : EIGRP_INT;
-	msg.metrics = route->reported_metric;
+			 || route->type == EIGRP_TLV_MP_EXT)) ? EIGRP_EXT : EIGRP_INT;
+	if (route) {
+		msg.metrics = route->reported_metric;
+	} else {
+		memset(&msg.metrics, 0, sizeof(msg.metrics));
+		msg.metrics.delay = EIGRP_MAX_METRIC;
+	}
 	eigrp_fsm_event_lr(&msg);
 }
 
@@ -501,7 +504,7 @@ eigrp_fsm_event_select(eigrp_fsm_action_message_t *msg)
 			if (selected)
 				return EIGRP_FSM_EVENT_LR_FCS;
 
-			return EIGRP_FSM_EVENT_LR_FCN;
+			return EIGRP_FSM_EVENT_LR;
 		} else if (msg->packet_type == EIGRP_OPC_QUERY
 			   && (route->flags
 			       & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG)) {
@@ -568,7 +571,7 @@ eigrp_fsm_event_select(eigrp_fsm_action_message_t *msg)
 				if (selected)
 					return EIGRP_FSM_EVENT_LR_FCS;
 
-				return EIGRP_FSM_EVENT_LR_FCN;
+				return EIGRP_FSM_EVENT_LR;
 			}
 		}
 		return EIGRP_FSM_KEEP_STATE;
@@ -659,7 +662,7 @@ int eigrp_fsm_event_nq_fcn(eigrp_fsm_action_message_t *msg)
 	eigrp_fsm_active_timer_stop(prefix);
 	eigrp_fsm_reply_status_clear(prefix);
 
-	if (eigrp_nbr_count(eigrp)) {
+	if (eigrp_nbr_count(eigrp) > (msg->adv_router ? 1 : 0)) {
 		prefix->req_action |= EIGRP_FSM_NEED_QUERY;
 		eigrp_list_add(eigrp->topology_changes, prefix);
 	} else {
@@ -688,7 +691,7 @@ int eigrp_fsm_event_q_fcn(eigrp_fsm_action_message_t *msg)
 	prefix->query_origin = msg->adv_router;
 	eigrp_fsm_active_timer_stop(prefix);
 	eigrp_fsm_reply_status_clear(prefix);
-	if (eigrp_nbr_count(eigrp)) {
+	if (eigrp_nbr_count(eigrp) > (prefix->query_origin ? 1 : 0)) {
 		prefix->req_action |= EIGRP_FSM_NEED_QUERY;
 		eigrp_list_add(eigrp->topology_changes, prefix);
 	} else {
@@ -792,14 +795,21 @@ int eigrp_fsm_event_lr(eigrp_fsm_action_message_t *msg)
 	eigrp_prefix_descriptor_t *prefix = msg->prefix;
 	eigrp_route_descriptor_t *route = eigrp_topology_route_read(prefix);
 
-	prefix->fdistance = prefix->distance = prefix->rdistance =
-		route->distance;
-	prefix->reported_metric = route->total_metric;
+	if (route) {
+		prefix->fdistance = prefix->distance = prefix->rdistance =
+			route->distance;
+		prefix->reported_metric = route->total_metric;
+	} else {
+		prefix->fdistance = prefix->distance = prefix->rdistance =
+			EIGRP_MAX_METRIC;
+		memset(&prefix->reported_metric, 0, sizeof(prefix->reported_metric));
+		prefix->reported_metric.delay = EIGRP_MAX_METRIC;
+	}
 	(void)eigrp_eventlog_msg_add(eigrp, EIGRP_EVENTLOG_OPCODE_DUAL_METRIC_SET,
 		&prefix->destination, prefix->distance, prefix->fdistance,
-		route->reported_distance, 0);
+		route ? route->reported_distance : 0, 0);
 
-	if (prefix->state == EIGRP_FSM_STATE_ACTIVE_3 && prefix->query_origin)
+	if ((prefix->state == EIGRP_FSM_STATE_ACTIVE_3 || prefix->state == EIGRP_FSM_STATE_ACTIVE_2) && prefix->query_origin)
 		eigrp_reply_send(eigrp, prefix->query_origin, prefix);
 	prefix->query_origin = NULL;
 

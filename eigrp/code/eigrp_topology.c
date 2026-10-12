@@ -852,23 +852,32 @@ eigrp_result_t eigrp_topology_redistributed_route_remove(
 
 	poison = route->metric;
 	poison.delay = EIGRP_MAX_METRIC;
-	{
-		eigrp_fsm_action_message_t msg = {
-			.packet_type = EIGRP_OPC_UPDATE,
-			.eigrp = eigrp,
-			.adv_router = eigrp->neighbor_self,
-			.route = route,
-			.prefix = prefix,
-			.data_type = EIGRP_EXT,
-			.metrics = poison,
-		};
-		eigrp_fsm_event(&msg);
+	route->metric = poison;
+	route->reported_metric = poison;
+	route->total_metric = poison;
+	route->distance = EIGRP_MAX_METRIC;
+	route->reported_distance = EIGRP_MAX_METRIC;
+	route->flags &= ~EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG;
+
+	if (prefix->state == EIGRP_FSM_STATE_PASSIVE) {
+		eigrp_route_descriptor_t *selected = eigrp_topology_route_select(prefix);
+		if (selected) {
+			prefix->distance = selected->distance;
+			prefix->fdistance = selected->distance;
+			prefix->rdistance = selected->reported_distance;
+			prefix->reported_metric = selected->reported_metric;
+		} else {
+			prefix->distance = EIGRP_MAX_METRIC;
+			prefix->fdistance = EIGRP_MAX_METRIC;
+			prefix->rdistance = EIGRP_MAX_METRIC;
+			prefix->reported_metric = poison;
+		}
+		prefix->state = EIGRP_FSM_STATE_PASSIVE;
+		eigrp_topology_update_node_flags(eigrp, prefix);
+		eigrp_update_routing_table(eigrp, prefix);
 	}
-
+	eigrp_topology_redistributed_update_mark(eigrp, prefix);
 	eigrp_topology_changes_send(eigrp);
-
-	/* Passive unreachable state remains topology-owned until packetizer has
-	 * advertised it.  Active state remains owned by DUAL until convergence. */
 
 	return EIGRP_RESULT_SUCCESS;
 }
