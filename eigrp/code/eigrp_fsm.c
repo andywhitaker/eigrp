@@ -504,7 +504,7 @@ eigrp_fsm_event_select(eigrp_fsm_action_message_t *msg)
 			if (selected)
 				return EIGRP_FSM_EVENT_LR_FCS;
 
-			return EIGRP_FSM_EVENT_LR;
+			return EIGRP_FSM_EVENT_LR_FCN;
 		} else if (msg->packet_type == EIGRP_OPC_QUERY
 			   && (route->flags
 			       & EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG)) {
@@ -571,7 +571,7 @@ eigrp_fsm_event_select(eigrp_fsm_action_message_t *msg)
 				if (selected)
 					return EIGRP_FSM_EVENT_LR_FCS;
 
-				return EIGRP_FSM_EVENT_LR;
+				return EIGRP_FSM_EVENT_LR_FCN;
 			}
 		}
 		return EIGRP_FSM_KEEP_STATE;
@@ -662,7 +662,7 @@ int eigrp_fsm_event_nq_fcn(eigrp_fsm_action_message_t *msg)
 	eigrp_fsm_active_timer_stop(prefix);
 	eigrp_fsm_reply_status_clear(prefix);
 
-	if (eigrp_nbr_count(eigrp) > (msg->adv_router ? 1 : 0)) {
+	if (eigrp_nbr_count(eigrp)) {
 		prefix->req_action |= EIGRP_FSM_NEED_QUERY;
 		eigrp_list_add(eigrp->topology_changes, prefix);
 	} else {
@@ -691,7 +691,7 @@ int eigrp_fsm_event_q_fcn(eigrp_fsm_action_message_t *msg)
 	prefix->query_origin = msg->adv_router;
 	eigrp_fsm_active_timer_stop(prefix);
 	eigrp_fsm_reply_status_clear(prefix);
-	if (eigrp_nbr_count(eigrp) > (prefix->query_origin ? 1 : 0)) {
+	if (eigrp_nbr_count(eigrp)) {
 		prefix->req_action |= EIGRP_FSM_NEED_QUERY;
 		eigrp_list_add(eigrp->topology_changes, prefix);
 	} else {
