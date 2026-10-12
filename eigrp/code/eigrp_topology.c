@@ -156,11 +156,6 @@ static eigrp_metric_t eigrp_topology_redistributed_distance(
 		return EIGRP_MAX_METRIC;
 
 	calculation = *metric;
-	/* Locally selected redistribution seed delay is retained in the native
-	 * route object in CLI/TLV 10-microsecond units.  The DUAL calculation
-	 * consumes scaled delay, matching eigrp_topology_update_distance().
-	 */
-	calculation.delay = eigrp_delay_to_scaled(calculation.delay);
 	distance = eigrp_metric_calculate(eigrp, calculation);
 	return distance > EIGRP_MAX_METRIC ? EIGRP_MAX_METRIC : distance;
 }
@@ -347,7 +342,8 @@ eigrp_topology_route_select(eigrp_prefix_descriptor_t *prefix)
 		for (EIGRP_LIST_ITERATE_RO(routes, node, route)) {
 			if (route->distance == EIGRP_MAX_METRIC)
 				continue;
-			if (route->reported_distance >= prefix->fdistance)
+			if (route->reported_distance >= prefix->fdistance
+			    && route->reported_distance != 0)
 				continue;
 			return route;
 		}
@@ -1148,7 +1144,8 @@ void eigrp_topology_update_node_flags(eigrp_instance_t *eigrp,
 
 	for (EIGRP_LIST_ITERATE_RO(eligible, node, route)) {
 		uint32_t old_flags = route->flags;
-		bool feasible = route->reported_distance < dest->fdistance;
+		bool is_self = (eigrp->neighbor_self != NULL && route->adv_router == eigrp->neighbor_self);
+		bool feasible = (route->reported_distance < dest->fdistance) || is_self;
 		bool within_variance =
 			route->distance != EIGRP_MAX_METRIC
 			&& (uint64_t)route->distance
@@ -1258,7 +1255,10 @@ void eigrp_topology_metric_update(eigrp_instance_t *eigrp)
 			continue;
 		for (route = eigrp_topology_route_iterator_first(prefix, &iterator); route;
 		     route = eigrp_topology_route_iterator_next(&iterator)) {
-			route->reported_distance = eigrp_metric_calculate(eigrp, route->reported_metric);
+			if (route->adv_router == eigrp->neighbor_self)
+				route->reported_distance = 0;
+			else
+				route->reported_distance = eigrp_metric_calculate(eigrp, route->reported_metric);
 			if (route->ei)
 				route->distance = eigrp_metric_total_calculate(eigrp, route);
 			else

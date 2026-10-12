@@ -522,11 +522,7 @@ eigrp_fsm_event_select(eigrp_fsm_action_message_t *msg)
 				&prefix->destination, prefix->rij ? prefix->rij->count : 0,
 				route->ei ? route->ei->ifindex : 0, 0, 0);
 
-			if (change == METRIC_INCREASE
-			    && (route->flags
-				& EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG)) {
-				return EIGRP_FSM_EVENT_DINC;
-			} else if (prefix->rij->count) {
+			if (prefix->rij->count) {
 				return EIGRP_FSM_KEEP_STATE;
 			} else {
 				eigrp_log(EIGRP_LOG_INFO, "All reply received");
@@ -590,11 +586,7 @@ eigrp_fsm_event_select(eigrp_fsm_action_message_t *msg)
 				&prefix->destination, prefix->rij ? prefix->rij->count : 0,
 				route->ei ? route->ei->ifindex : 0, 0, 0);
 
-			if (change == METRIC_INCREASE
-			    && (route->flags
-				& EIGRP_ROUTE_DESCRIPTOR_SUCCESSOR_FLAG)) {
-				return EIGRP_FSM_EVENT_DINC;
-			} else if (prefix->rij->count) {
+			if (prefix->rij->count) {
 				return EIGRP_FSM_KEEP_STATE;
 			} else {
 				eigrp_log(EIGRP_LOG_INFO, "All reply received");

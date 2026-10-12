@@ -338,6 +338,8 @@ static void eigrp_packetizer_query_rij_add(eigrp_prefix_descriptor_t *prefix,
 	for (EIGRP_LIST_ITERATE_RO(ei->nbrs, node, nbr)) {
 		if (nbr->state != EIGRP_NEIGHBOR_UP)
 			continue;
+		if (prefix->query_origin && nbr == prefix->query_origin)
+			continue;
 		eigrp_fsm_reply_status_add(prefix, nbr);
 	}
 }
